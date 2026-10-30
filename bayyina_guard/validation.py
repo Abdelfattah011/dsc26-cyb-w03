@@ -87,7 +87,8 @@ def validate_upload(meta: dict) -> CleanUpload:
         errors["matter_id"] = "Matter ID must be a string."
     else:
         is_ascii = all(ord(c) < 128 for c in matter_id)
-        pattern = re.compile(r"^MAT-\d{4}_\d{5}$")
+        # تم تصحيح الشرطة لتكون بافن `-` بدلاً من الشرطة السفلية `_` مطابقة للمواصفات
+        pattern = re.compile(r"^MAT-\d{4}-\d{5}$")
         if not is_ascii or not pattern.match(matter_id):
             errors["matter_id"] = "Invalid matter ID format."
 
@@ -104,8 +105,3 @@ def validate_upload(meta: dict) -> CleanUpload:
         size_bytes=size_bytes,
         matter_id=matter_id
     )
-
-
-def validate_upload(meta: dict) -> CleanUpload:
-    """Check every field of `meta` and raise one ValidationError listing all failing fields."""
-    raise NotImplementedError
