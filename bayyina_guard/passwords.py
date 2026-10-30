@@ -5,6 +5,7 @@ import base64
 import hashlib
 import hmac
 import os
+import unicodedata
 
 CURRENT_N = 2**14
 CURRENT_R = 8
@@ -33,7 +34,8 @@ def hash_password(password: str) -> str:
     if not isinstance(password, str):
         raise TypeError("Password must be a string.")
     
-    normalized = password
+    # إضافة تطبيع NFKC المطلوب
+    normalized = unicodedata.normalize("NFKC", password)
     if not (8 <= len(normalized) <= 128):
         raise ValueError("Password length must be between 8 and 128 characters.")
 
@@ -70,7 +72,6 @@ def verify_password(password: str, stored: str) -> bool:
         salt_b64 = parts[4]
         hash_b64 = parts[5]
 
-        # Validate bounds before calling scrypt to prevent DoS/memory exhaustion
         if not (n & (n - 1) == 0 and 2 <= n <= 2**20):
             return False
         if not (1 <= r <= 32):
@@ -84,7 +85,8 @@ def verify_password(password: str, stored: str) -> bool:
         if salt is None or len(salt) < 16 or stored_hash is None or len(stored_hash) != 32:
             return False
 
-        normalized = password
+        # إضافة تطبيع NFKC المطلوب للتحقق
+        normalized = unicodedata.normalize("NFKC", password)
         if not (8 <= len(normalized) <= 128):
             return False
 
