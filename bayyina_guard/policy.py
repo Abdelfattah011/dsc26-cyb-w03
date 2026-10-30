@@ -1,4 +1,3 @@
-"""Document access policy for Bayyina. Rules: README.md, "What to build", part 2."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,10 +6,10 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class User:
     id: str
-    role: str                       # partner | associate | paralegal | client | auditor
+    role: str                      # partner | associate | paralegal | client | auditor
     client_id: str | None = None    # for client users: which Bayyina client they belong to
     matters: frozenset[str] = field(default_factory=frozenset)
-    mfa: bool = False               # this session passed MFA
+    mfa: bool = False              # this session passed MFA
 
 
 @dataclass(frozen=True)
@@ -28,11 +27,68 @@ class Decision:
     reason: str
 
 
+VALID_ACTIONS = {"read", "comment", "upload_version", "delete", "share_external"}
+VALID_ROLES = {"partner", "associate", "paralegal", "client", "auditor"}
+
+ROLE_PERMISSIONS = {
+    "partner": {"read", "comment", "upload_version", "delete", "share_external"},
+    "associate": {"read", "comment", "upload_version"},
+    "paralegal": {"read", "upload_version"},
+    "client": {"read", "comment"},
+    "auditor": set()
+}
+
+
 def authorize(user: User | None, action: str, doc: Document) -> Decision:
     """Evaluate the nine rules in order and return the first denial, else Decision(True, "ok")."""
-    raise NotImplementedError
+    
+    # Rule 1: unauthenticated
+    if user is None or not user.id:
+        return Decision(False, "unauthenticated")
+    
+    # Rule 2: unknown_action
+    if action not in VALID_ACTIONS:
+        return Decision(False, "unknown_action")
+        
+    # Rule 3: unknown_role
+    if user.role not in VALID_ROLES:
+        return Decision(False, "unknown_role")
+        
+    # Rule 4: legal_hold
+    if action == "delete" and doc.legal_hold:
+        return Decision(False, "legal_hold")
+        
+    # Rule 5: role_not_permitted
+    allowed_actions = ROLE_PERMISSIONS.get(user.role, set())
+    if action not in allowed_actions:
+        return Decision(False, "role_not_permitted")
+        
+    # Rule 6: tenant_mismatch
+    if user.role == "client":
+        if user.client_id is None or user.client_id != doc.client_id:
+            return Decision(False, "tenant_mismatch")
+            
+    # Rule 7: not_assigned
+    if user.role in ("associate", "paralegal"):
+        if doc.matter_id not in user.matters:
+            return Decision(False, "not_assigned")
+            
+    # Rule 8: restricted
+    if user.role in ("client", "paralegal"):
+        if doc.confidentiality != "normal":
+            return Decision(False, "restricted")
+            
+    # Rule 9: mfa_required
+    if doc.confidentiality != "normal" or action == "share_external":
+        if not user.mfa:
+            return Decision(False, "mfa_required")
+            
+    return Decision(True, "ok")
 
 
 def visible_documents(user: User | None, docs: list[Document]) -> list[Document]:
     """The documents `user` may read, in their original order."""
-    raise NotImplementedError
+    if user is None or not user.id:
+        return []
+        
+    return [doc for doc in docs if authorize(user, "read", doc).allowed]
